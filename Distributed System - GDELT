@@ -1,0 +1,23 @@
+import pandas
+import numpy
+
+header_file = pandas.read_excel("https://www.gdeltproject.org/data/lookups/CSV.header.fieldids.xlsx")
+head_of_export = list(header_file.axes[1])
+head_of_export.insert(39, 'Actor1Geo_ADM2Code')
+head_of_export.insert(47, 'Actor2Geo_ADM2Code')
+head_of_export.insert(55, 'ActionGeo_ADM2Code')
+
+dtype_of_export = {}
+for col in head_of_export:
+    dtype_of_export[str(col)] = str
+
+for col in ('GLOBALEVENTID','SQLDATE','MonthYear','IsRootEvent','QuadClass','NumMentions','NumSources','NumArticles',\
+            'Actor1Geo_Type','Actor2Geo_Type','ActionGeo_Type','DATEADDED'):
+    dtype_of_export[col] = int
+
+for col in ('FractionDate','GoldsteinScale','AvgTone'):
+    dtype_of_export[col] = float
+
+export = pandas.read_csv("C:/Users/Peter/Downloads/GDELT - 20150218230000.export.csv", sep='\t', lineterminator='\n', nrows=50, dtype=dtype_of_export, names=head_of_export)
+mention = pandas.read_csv("C:/Users/Peter/Downloads/GDELT - 20150218230000.mentions.csv", sep='\t', lineterminator='\n', nrows=50, dtype=str)
+
