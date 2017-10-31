@@ -36,6 +36,17 @@ for col in ('MentionDocTranslationInfo','MentionSourceName','MentionIdentifier',
 for col in ('EventTimeDate','MentionTimeDate','MentionDocTone'): #<----These Date are 'float'
     dtype_of_mention[col] = float
 
-#import table------------------------------------------------------------------
+#import table and code---------------------------------------------------------
 export = pandas.read_csv("C:/Users/Peter/Downloads/GDELT - 20150218230000.export.csv", sep='\t', lineterminator='\n', nrows=50, dtype=dtype_of_export, names=head_of_export)
 mention = pandas.read_csv("C:/Users/Peter/Downloads/GDELT - 20150218230000.mentions.csv", sep='\t', lineterminator='\n', nrows=50, dtype=dtype_of_mention, names=head_of_mention)
+
+CountryCode = pandas.read_csv("https://www.gdeltproject.org/data/lookups/CAMEO.country.txt", sep='\t', lineterminator='\n')
+Geo_CountryCode = pandas.read_csv("https://www.gdeltproject.org/data/lookups/FIPS.country.txt", sep='\t', lineterminator='\n', names=['CODE','LABEL'])
+TypeCode = pandas.read_csv("https://www.gdeltproject.org/data/lookups/CAMEO.type.txt", sep='\t', lineterminator='\n')
+KnownGroupCode = pandas.read_csv("https://www.gdeltproject.org/data/lookups/CAMEO.knowngroup.txt", sep='\t', lineterminator='\n')
+EthnicCode = pandas.read_csv("https://www.gdeltproject.org/data/lookups/CAMEO.ethnic.txt", sep='\t', lineterminator='\n')
+ReligionCode = pandas.read_csv("https://www.gdeltproject.org/data/lookups/CAMEO.religion.txt", sep='\t', lineterminator='\n')
+EventCode = pandas.read_csv("https://www.gdeltproject.org/data/lookups/CAMEO.eventcodes.txt", sep='\t', lineterminator='\n', dtype=str)
+GoldsteinScaleCode = pandas.read_csv("https://www.gdeltproject.org/data/lookups/CAMEO.goldsteinscale.txt", sep='\t', lineterminator='\n', dtype={"CAMEOEVENTCODE":str,"GOLDSTEINSCALE":float})
+
+
