@@ -37,8 +37,10 @@ for col in ('EventTimeDate','MentionTimeDate','MentionDocTone'): #<----These Dat
     dtype_of_mention[col] = float
 
 #import table and code---------------------------------------------------------
-export = pandas.read_csv("C:/Users/Peter/Downloads/GDELT - 20150218230000.export.csv", sep='\t', lineterminator='\n', nrows=50, dtype=dtype_of_export, names=head_of_export)
-mention = pandas.read_csv("C:/Users/Peter/Downloads/GDELT - 20150218230000.mentions.csv", sep='\t', lineterminator='\n', nrows=50, dtype=dtype_of_mention, names=head_of_mention)
+export = pandas.read_csv("http://data.gdeltproject.org/gdeltv2/20150218230000.export.CSV.zip", \
+                         compression='zip', sep='\t', lineterminator='\n', nrows=50, dtype=dtype_of_export, names=head_of_export)
+mention = pandas.read_csv("http://data.gdeltproject.org/gdeltv2/20150218230000.mentions.CSV.zip", \
+                          compression='zip', sep='\t', lineterminator='\n', nrows=50, dtype=dtype_of_mention, names=head_of_mention)
 
 CountryCode = pandas.read_csv("https://www.gdeltproject.org/data/lookups/CAMEO.country.txt", sep='\t', lineterminator='\n')
 Geo_CountryCode = pandas.read_csv("https://www.gdeltproject.org/data/lookups/FIPS.country.txt", sep='\t', lineterminator='\n', names=['CODE','LABEL'])
