@@ -10,20 +10,19 @@ object GDELTAnalyzer{
 
         val SQLContext = spark.sqlContext
         import SQLContext.implicits._
-
+        val sc = spark.sparkContext
 
         val GDELTHeader = spark.read.format("csv").option("header", "true").option("delimiter", "\t").load(/*"/Users/psyman/Documents/HW/Nccucs_work/DS TODO : Filepath*/"./Header.csv").columns
-
         var GDELTDataFrame = spark.read.format("csv").option("header", "false").option("delimiter", "\t").load(/*"/Users/psyman/Documents/HW/Nccucs_work/DS TODO : Filepath*/"./20171023121500.export.CSV").toDF(GDELTHeader:_*)
         GDELTDataFrame = GDELTDataFrame.filter($"EventCode".startsWith("19") and $"Actor1Name".isNotNull and $"Actor2Name".isNotNull and $"Actor1CountryCode".isNotNull and $"Actor2CountryCode".isNotNull).toDF()
 
         val Actors = GDELTDataFrame.select("Actor1CountryCode", "Actor2CountryCode").flatMap( x => Iterable(x(0).toString, x(1).toString())).distinct()
         val Relationships = GDELTDataFrame.select("Actor1CountryCode", "Actor2CountryCode").rdd
 
-        val ActorVertices:RDD[(VertexId, String)] = Actors.map(x => (MurmurHash3.stringHash(x).toLong, x)).rdd
-        var ActionEdges = Relationships.map( x => ((MurmurHash3.stringHash(x(0).toString), MurmurHash3.stringHash(x(1).toString)), 1)).reduceByKey(_+_).map(x => Edge(x._1._1, x._1._2, x._2))
+        val ActorVertices:RDD[(VertexId, String)] = sc.parallelize(Actors.map(x => (MurmurHash3.stringHash(x).toLong, x)).collect())
+        val ActionEdges:RDD[Edge[Int]] =  sc.parallelize(Relationships.map( x => ((MurmurHash3.stringHash(x(0).toString), MurmurHash3.stringHash(x(1).toString)), 1)).reduceByKey(_+_).map(x => Edge(x._1._1.toLong, x._1._2.toLong, x._2)).collect())
 
-        val DangerGraph = Graph(ActorVertices, ActionEdges)
+        val DangerGraph = Graph(ActorVertices, ActionEdges).partitionBy(PartitionStrategy.EdgePartition2D).cache()
 
         println(s"Number of vertices: ${DangerGraph.numVertices}")
         println(s"Number of edges: ${DangerGraph.numEdges}")
