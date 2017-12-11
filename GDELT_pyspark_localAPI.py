@@ -12,7 +12,7 @@ from pyspark.sql import SparkSession
 spark_SQL = SparkSession(sc)
 
 from oauth2client.client import GoogleCredentials
-#credentials = GoogleCredentials.from_json("/Users/feg2034/GDELT-pyspark-461e1d6523fe.json")
+#credentials = GoogleCredentials.from_json("********")
 
 #search_range = input(">>>Analysis period (YYYYMMDD):")
 #search_event = input(">>>Analysis event:")
