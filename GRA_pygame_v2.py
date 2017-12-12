@@ -3,7 +3,9 @@ import math
 import tkinter
 import pygame
 import os
+import platform
 
+pygame.init()
 #all the point are 2D; using numpy.array
 #all vector, configuration are 1D
 
@@ -272,8 +274,10 @@ Button_NF1.pack(fill=tkinter.BOTH, expand=1)
 
 ##embed pygame into tkinter
 os.environ['SDL_WINDOWID'] = str(pygame_win.winfo_id())
-os.putenv('SDL_VIDEODRIVER', 'Quartz')
-#os.environ['SDL_VIDEODRIVER'] = 'windib' <- needed for window OS
+if platform.system() == 'Darwin': # <- for Mac OS
+    os.environ['SDL_VIDEODRIVER'] = 'Quartz' 
+elif platform.system() == 'Windows': # <- for Windows
+    os.environ['SDL_VIDEODRIVER'] = 'windib'
 
 root.update()
 
@@ -282,9 +286,9 @@ black = (0,0,0)
 white = (255,255,255)
 red = (255,0,0)
 
-pygame.init()
 gameDisplay = pygame.display.set_mode((display_width,display_height))
 pygame.display.set_caption('Motion Planning - Displaying board')
+clock = pygame.time.Clock()
 
 def main():
 
@@ -343,8 +347,7 @@ def main():
             object.display_draw(gameDisplay, red)
         
         pygame.display.update()
-        pygame.time.Clock().tick(30)
-        
         root.update()
+        clock.tick(30)
 
 main()
