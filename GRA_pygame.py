@@ -13,6 +13,7 @@ pygame.init()
 scale = 400/128 # display / model
 display_width = int(128*scale)
 display_height = int(128*scale)
+box_edge = numpy.array([[0,0], [0,127], [127,127], [127,0]])
 
 #function_setup-----------------------------------------------------------------
 
@@ -43,10 +44,10 @@ def get_angle(vector1, vector2):
     return math.degrees(math.atan2(vector2[1], vector2[0]) - math.atan2(vector1[1], vector1[0]))
 
 #--assign the point in obstacles or not; point as matrix, edge as xytheta
-#----point <- list / numpy.array (1D); edge <- list / numpy.array(1D)
-def point_left(point, edge):
-    temp = TR(numpy.array(point).reshape((1,2)),[0,0,math.degrees(-math.atan2(edge[1], edge[0]))])
-    return temp[0,1] > 0
+#----vector_of_point <- list / numpy.array (1D); vector_of_edge <- list / numpy.array(1D)
+def point_left(vector_of_point, vector_of_edge):
+    temp = TR(numpy.array(vector_of_point).reshape((1,2)), [0,0,-math.degrees(math.atan2(vector_of_edge[1], vector_of_edge[0]))])
+    return temp[0,1] >= 0
 
 #objects_setup------------------------------------------------------------------
 
@@ -110,6 +111,45 @@ class robots:
         for i in range(self.n_polygon):
             pygame.draw.polygon(game, color, numpy.array(self.display_polygon[i]), width)
 
+    def NF1(self):
+        U = {0: numpy.ones(128*128).reshape(128,128) * 255 } #initial potential = 255
+        for obstacle in display_objects[2:]: #obstacle potential = 260
+            for x in range(obstacle.planning_bounding_box[0,0], obstacle.planning_bounding_box[1,0]+1):
+                for y in range(obstacle.planning_bounding_box[0,1], obstacle.planning_bounding_box[1,1]+1):
+                    if obstacle.point_inside([x,y]):
+                        U[0][127-y,x] = 260
+
+        for n in range(self.n_control):
+            U[n+1] = U[0].copy()
+            U[n+1][128-self.planning_control[n][1], self.planning_control[n][0]] = 0
+            L = {0: [numpy.array([0,0,0])], 1: []} #(dx,dy, delta theta) based on self.planning_control[n,:]
+            order = 0
+            while L[0]: # L[0] is not empty --> return True
+                L[1] = []
+                for q in L[0]:
+                    control = TR(self.world_control[n].reshape((1,2)), (self.planning_conf+q)).reshape((2,)).astype(int) #current control point (x,y) <- numpy.array (1D)
+                    for dx in (1,-1):
+                        if (0<= (control[0]+dx) <=127): #bounded
+                            if (U[n+1][127-control[1], control[0]+dx] == 255):
+                                U[n+1][127-control[1], control[0]+dx] = order + 1
+                                L[1] += [(q+(dx,0,0)).astype(int)]
+                    for dy in (1,-1):
+                        if (0<= (control[1]+dy) <=127): #bounded
+                            if (U[n+1][127-control[1]-dy, control[0]] == 255):
+                                U[n+1][127-control[1]-dy, control[0]] = order + 1
+                                L[1] += [(q+(0,dy,0)).astype(int)]
+                    for theta in (1,-1):
+                        control = TR(self.world_control[n].reshape((1,2)), (self.planning_conf+q+(0,0,theta))).reshape((2,)).astype(int)
+                        if (0,0)<= tuple(control) <=(127,127):
+                            if (U[n+1][127-control[1], control[0]] == 255):
+                                U[n+1][127-control[1], control[0]] = order + 1
+                                L[1] += [(q+(0,0,theta)).astype(int)]
+                L[0] = L[1]
+                order += 1
+        U_total = U[1]
+        for n in range(self.n_control-1):
+            U_total = numpy.maximum(U_total, U[2+n])
+        print(U_total)
 
 class obstacles:
     def __init__(self, conf, n_polygon, vertices):
@@ -206,47 +246,6 @@ obstacles2 = obstacles(conf = [56,30,90], n_polygon = 2, \
 
 display_objects = [robots0_recent, robots0_goal, obstacles0, obstacles1, obstacles2]
 
-##NF1---------------------------------------------------------------------------
-
-def NF1(robot_goal=display_objects[1]):
-    U = {0: numpy.ones(128*128).reshape(128,128) * 255 } #initial potential = 255
-    for obstacle in display_objects[2:]: #obstacle potential = 260
-        for x in range(robot_goal.planning_bounding_box[0,0], robot_goal.planning_bounding_box[1,0]):
-            for y in range(robot_goal.planning_bounding_box[0,1], robot_goal.planning_bounding_box[1,1]):
-                if obstacle.point_inside([x,y]):
-                    U[0][127-y,x] = 260
-
-    for n in range(robot_goal.n_control):
-        U[n+1] = U[0]
-        U[n+1][128-robot_goal.planning_control[n][1], robot_goal.planning_control[n][0]] = 0
-        L = {0: [numpy.array([0,0,0])], 1: []} #(dx,dy, delta theta) based on robot_goal.planning_control[n,:]
-        order = 0
-        while L[0]: # L[0] is not empty --> return True
-            L[1] = []
-            for q in L[0]:
-                control = TR(robot_goal.world_control[n].reshape((1,2)), (robot_goal.planning_conf+q)).reshape((2,)).astype(int) #current control point (x,y) <- numpy.array (1D)
-                for dx in (1,-1):
-                    if (0<= (control[0]+dx) <=127): #bounded
-                        if (U[n+1][127-control[1], control[0]+dx] == 255):
-                            U[n+1][127-control[1], control[0]+dx] = order + 1
-                            L[1] += [(q+(dx,0,0)).astype(int)]
-                for dy in (1,-1):
-                    if (0<= (control[1]+dy) <=127): #bounded
-                        if (U[n+1][127-control[1]-dy, control[0]] == 255):
-                            U[n+1][127-control[1]-dy, control[0]] = order + 1
-                            L[1] += [(q+(0,dy,0)).astype(int)]
-                for theta in (1,-1):
-                    control = TR(robot_goal.world_control[n].reshape((1,2)), (robot_goal.planning_conf+q+(0,0,theta))).reshape((2,)).astype(int)
-                    if (0,0)<= tuple(control) <=(127,127):
-                        if (U[n+1][127-control[1], control[0]] == 255):
-                            U[n+1][127-control[1], control[0]] = order + 1
-                            L[1] += [(q+(0,0,theta)).astype(int)]
-            L[0] = L[1]
-            order += 1
-    U_total = U[1]
-    for n in range(robot_goal.n_control-1):
-        U_total = numpy.maximum(U_total, U[2+n])
-    print(U_total)
 
 #tkinter_initialization--------------------------------------------------------
 root = tkinter.Tk()
@@ -255,22 +254,18 @@ pygame_win = tkinter.Frame(root, width = 200, height = 200, background="gray14")
 pygame_win.pack(fill=tkinter.X, padx=100, pady=100)
 
 ##Label, Checkbotton, Botton
-check1 = tkinter.IntVar()
-check2 = tkinter.IntVar()
-Check_lock = tkinter.Checkbutton(pygame_win, text="Lock", variable=check1, width=10)
-Check_unlock = tkinter.Checkbutton(pygame_win, text="Unlock", variable=check2, width=10)
+check = tkinter.BooleanVar()
+Check_lock = tkinter.Checkbutton(pygame_win, text="Lock", variable=check, width=10)
 
 option_var = tkinter.StringVar(pygame_win)
 option_var.set("robot #0")
 Option = tkinter.OptionMenu(pygame_win, option_var, "robot #0", "robot #1")
 
-Button_NF1 = tkinter.Button(pygame_win, text="Show NF1", command = NF1)
+Button_NF1 = tkinter.Button(pygame_win, text="Show NF1", command = display_objects[1].NF1)
 
 Check_lock.pack(fill=tkinter.Y, side=tkinter.LEFT, expand=1)
-Check_unlock.pack(fill=tkinter.Y, side=tkinter.LEFT, expand=1)
 Option.pack(fill=tkinter.BOTH, expand=1)
 Button_NF1.pack(fill=tkinter.BOTH, expand=1)
-
 
 ##embed pygame into tkinter
 os.environ['SDL_WINDOWID'] = str(pygame_win.winfo_id())
@@ -285,6 +280,7 @@ root.update()
 black = (0,0,0)
 white = (255,255,255)
 red = (255,0,0)
+blue = (0,0,139)
 
 gameDisplay = pygame.display.set_mode((display_width,display_height))
 pygame.display.set_caption('Motion Planning - Displaying board')
@@ -301,9 +297,11 @@ def main():
         
         if option_var.get() == "robot #0":
             display_objects = [robots0_recent, robots0_goal, obstacles0, obstacles1, obstacles2]
+            Button_NF1.config(command = robots0_goal.NF1)
         else:
             display_objects = [robots1_recent, robots1_goal, obstacles0, obstacles1, obstacles2]
-        
+            Button_NF1.config(command = robots1_goal.NF1)
+
 #mouse_control-----------------------------------------------------------------
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1: #mouse_left
             mouse_position1 = numpy.array(pygame.mouse.get_pos())
@@ -339,13 +337,15 @@ def main():
         
 #display section---------------------------------------------------------------
         gameDisplay.fill(white)
-        
+
+        pygame.draw.polygon(gameDisplay, blue, numpy.array(planning_to_display(box_edge)), 1)
+
         display_objects[0].display_draw(gameDisplay, black) #draw robot_recent
         display_objects[1].display_draw(gameDisplay, black, width=2) #draw robot_goal
 
         for object in display_objects[2:]: #draw obstacle
             object.display_draw(gameDisplay, red)
-        
+
         pygame.display.update()
         root.update()
         clock.tick(30)
