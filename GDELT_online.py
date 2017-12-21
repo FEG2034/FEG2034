@@ -1,11 +1,18 @@
-#python 2.7
+# env: python 2.7
 import datetime # <- built-in function
 timestamp_main = datetime.datetime.now()
+
+# Part(0) intitailize global varaible---------------------------------------------------------------
+dataset_on_BigQuery = "DS_GDELT_dataset"
+table_name = "result_" + str(timestamp_main.year) + str(timestamp_main.month) + str(timestamp_main.day) \
+            + "_" + str(timestamp_main.hour) + str(timestamp_main.minute) + str(timestamp_main.second)
+
+partition_number = 5
 
 # Part(1) input command: spark-submit /file/path YYYYMMDD YYYYMMDD event-number---------------------
 timestamp_Part1 = datetime.datetime.now()
 
-import sys
+import sys # <- built-in function
 search_range = [int(sys.argv[1]), int(sys.argv[2])] # as input(">>>Analysis period (YYYYMMDD):") in python
 search_event = int(sys.argv[3]) # as input(">>>Analysis event:") in python
 
@@ -14,15 +21,14 @@ timecost_Part1 = (datetime.datetime.now() - timestamp_Part1).total_seconds()
 # Part(2) Query the data from project-id: GDELT to our own BigQuery Project-id.Dataset.Table--------
 timestamp_Part2 = datetime.datetime.now()
 
-from google.cloud import bigquery # <- pip install
+from google.cloud import bigquery # <- sudo pip install google-cloud
 from google.cloud.bigquery import job
 
-#source--https://cloud.google.com/bigquery/docs/python-client-migration?hl=zh-tw
+# source--https://cloud.google.com/bigquery/docs/python-client-migration?hl=zh-tw
 bq = bigquery.Client() #project = gdelt-pyspark
-gdelt_dataset = bq.dataset("DS_GDELT_dataset")
+gdelt_dataset = bq.dataset(dataset_on_BigQuery)
 
 # create now table with timestamp under project-id:dataset
-table_name = "result_" + str(timestamp_Part2.year)+str(timestamp_Part2.month)+str(timestamp_Part2.day)+str(timestamp_Part2.hour)+str(timestamp_Part2.minute)+str(timestamp_Part2.second)
 
 SCHEMA = [ bigquery.SchemaField("Actor1CountryCode", "string"), bigquery.SchemaField("Actor2CountryCode", "string") ]
 
@@ -50,10 +56,9 @@ timestamp_Part3 = datetime.datetime.now()
 import ast # <- built-in function
 from pyspark import SparkConf, SparkContext
 from pyspark.sql import SQLContext
-from pyspark.sql import SparkSession
 
-conf = SparkConf()
-sc = SparkContext(conf = conf) #Cannot run multiple SparkContexts at once; existing SparkContext(app=PySparkShell, master=yarn) created by <module>
+#conf = SparkConf()
+#sc = SparkContext(conf = conf)
 SQLCtx = SQLContext(sc)
 
 project = sc._jsc.hadoopConfiguration().get('fs.gs.project.id')
@@ -65,7 +70,7 @@ conf_BQ = {
     'mapred.bq.gcs.bucket': bucket,
     'mapred.bq.temp.gcs.path': input_directory,
     'mapred.bq.input.project.id': project,
-    'mapred.bq.input.dataset.id': 'DS_GDELT_dataset',
+    'mapred.bq.input.dataset.id': dataset_on_BigQuery,
     'mapred.bq.input.table.id': table_name, # no NULL in this table
 }
 
@@ -76,10 +81,9 @@ table_data = sc.newAPIHadoopRDD(
     conf=conf_BQ) #Json is the problem, we need table/csv inputformat (use json.load)
 
 table_values = table_data.values().map(lambda x: ast.literal_eval(x)) # catch the value of pairRDD, than convert unicode object into dist
-input_list = table_values.collect()
 
-input_DataFrame = SQLCtx.createDataFrame(input_list) # convert [dict(Actor1CountryCode, Actor2CountryCode)] into SQL.DataFrame
-input_rdd = input_DataFrame.rdd.partitionBy(5)
+input_DataFrame = SQLCtx.createDataFrame(table_values) # convert [dict(Actor1CountryCode, Actor2CountryCode)] into SQL.DataFrame
+input_rdd = input_DataFrame.rdd.partitionBy(partition_number)
 
 timecost_Part3 = (datetime.datetime.now() - timestamp_Part3).total_seconds()
 
@@ -87,7 +91,7 @@ timecost_Part3 = (datetime.datetime.now() - timestamp_Part3).total_seconds()
 timestamp_Part4 = datetime.datetime.now()
 
 import networkx # <- sudo pip install networkx
-import pandas # <- pip install
+import pandas # <- sudo pip install pandas
 from collections import Counter # <- built-in function
 
 CountryCode = pandas.read_csv("https://www.gdeltproject.org/data/lookups/CAMEO.country.txt", sep='\t', lineterminator='\n')
