@@ -2,6 +2,7 @@
 import ast
 import sys
 import datetime
+import operator
 
 #Google cloud imports
 from google.cloud import bigquery
@@ -12,7 +13,7 @@ from pyspark import SparkConf, SparkContext
 from pyspark.sql import SQLContext, Row
 
 #NetworkX
-import networkx
+import networkx as nx
 
 #Global variables
 GDELT_EVENT_TABLE_NAME = "`gdelt-bq.gdeltv2.events`"
@@ -42,7 +43,7 @@ def createBigQueryTableBySchema(bigQueryClient, schema):
 def createQueryCommand(eventType, dateTimeFrom, dateTimeTo):
 	queryCmd = "SELECT Actor1CountryCode, Actor2CountryCode FROM {0} \
 	WHERE EventCode LIKE '{1}%' and SQLDATE >= {2} and SQLDATE <= {3} \
-	AND Actor1CountryCode IS NOT NULL AND Actor2CountryCode IS NOT NULL LIMIT 100".format(GDELT_EVENT_TABLE_NAME, eventType, dateTimeFrom, dateTimeTo)
+	AND Actor1CountryCode IS NOT NULL AND Actor2CountryCode IS NOT NULL and Actor1Name IS NOT NULL and Actor2Name IS NOT NULL".format(GDELT_EVENT_TABLE_NAME, eventType, dateTimeFrom, dateTimeTo)
 	return queryCmd
 
 def queryGDELT(eventType, dateTimeFrom, dateTimeTo):
@@ -59,68 +60,46 @@ def queryGDELT(eventType, dateTimeFrom, dateTimeTo):
 	iterator = queryJob.result()
 	return list(iterator)
 
-def getDataFromBigQuery():
-	project = sc._jsc.hadoopConfiguration().get('fs.gs.project.id')
-	bucket = sc._jsc.hadoopConfiguration().get('fs.gs.system.bucket')
-	input_directory = 'gs://{}/pyspark_input'.format(bucket)
-
-	confBQ = {
-		'mapred.bq.project.id': project,
-		'mapred.bq.gcs.bucket': bucket,
-		'mapred.bq.temp.gcs.path': input_directory,
-		'mapred.bq.input.project.id': project,
-		'mapred.bq.input.dataset.id': DATASET_NAME_ON_BIGQUERY,
-		'mapred.bq.input.table.id': TABLE_NAME_IN_DATASET, # no NULL in this table
-	}
-
-	tableData = sc.newAPIHadoopRDD(
-		'com.google.cloud.hadoop.io.bigquery.JsonTextBigQueryInputFormat',
-		'org.apache.hadoop.io.LongWritable',
-		'com.google.gson.JsonObject',
-		conf=confBQ)
-
-	return tableData
-
 def preprocessing(data):
 	SQLCtx = SQLContext(SPARKCONTEXT)
 	dataValues = [row.values() for row in data]
 	dataRDD = SPARKCONTEXT.parallelize(dataValues)
-	actors = dataRDD.map(lambda actor : Row(Actor1CountryCode=actor[0], Actor2CountryCode=actor[1]))
-	#tableValues = data.values().map(lambda x: ast.literal_eval(x)) # catch the value of pairRDD, than convert unicode object into dist
-	inputDataFrame = SQLCtx.createDataFrame(actors) # convert [dict(Actor1CountryCode, Actor2CountryCode)] into SQL.DataFrame
-	inputRDD = inputDataFrame.rdd.partitionBy(RDD_PARTITIONS)
-	for data in inputRDD.collect():
-		print data
-	return inputRDD
+	actorDataRows = dataRDD.map(lambda actor : Row(Actor1CountryCode=actor[0], Actor2CountryCode=actor[1]))
+	inputDataFrame = SQLCtx.createDataFrame(actorDataRows) 
+	queryResult = inputDataFrame.select("Actor1CountryCode", "Actor2CountryCode")
+	relationships = queryResult.rdd.map(lambda data : (data.Actor1CountryCode, data.Actor2CountryCode)).collect()#By document of networkx, nodes will automatically be added when adding an edge so only relationships matter
+	return relationships
 
-def createGraphFromDataFrame(data):
-	graph = networkx.DiGraph()
-	#TODO
-	return graph
+def createGraphFromRelationships(edges):
+	G = nx.DiGraph()
+	for edge in edges:
+		if G.has_edge(edge[0], edge[1]):
+			G[edge[0]][edge[1]]["weight"] += 1
+		else:
+			G.add_edge(edge[0], edge[1], weight=1)
+	"""
+	for edge in G.edges:
+		print("Edge : {0}-->{1}, Weight : {2}".format(edge[0], edge[1], G[edge[0]][edge[1]]["weight"]))
+	print("================")
+	"""
+	return G
 
 def calculatePageRank(graph):
-	#TODO
-	return 0.0
+	return nx.pagerank_scipy(graph, tol=0.0001)
 
 def main():
 	eventType, dateTimeFrom, dateTimeTo = getArgs()
 	queryResult = queryGDELT(eventType, dateTimeFrom, dateTimeTo)
-	for result in queryResult:
-		print result
-		print result[0]
-		print result[1]
-	"""
-		print "========================="
-		rawData.append((result[0], result[1]))
-	print rawData
-	"""
-	#testRDD = preprocessing(queryResult)
-	dataRDD = preprocessing(queryResult)
 
-	graph = createGraphFromDataFrame(dataRDD)
-	pageRank = calculatePageRank(graph)
+	relationships = preprocessing(queryResult)
 
-	print pageRank
+	graph = createGraphFromRelationships(relationships)
+	pageRank = sorted(calculatePageRank(graph).items(), key=operator.itemgetter(1), reverse=True)
+	
+	for result in pageRank[:10]:
+		print("{0} : {1}".format(result[0], result[1]))
+	
+	SPARKCONTEXT.stop()
 	return
 
 main()
