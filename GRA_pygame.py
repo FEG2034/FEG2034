@@ -49,6 +49,53 @@ def point_left(vector_of_point, vector_of_edge):
     temp = TR(numpy.array(vector_of_point).reshape((1,2)), [0,0,-math.degrees(math.atan2(vector_of_edge[1], vector_of_edge[0]))])
     return temp[0,1] >= 0
 
+#--Best First Search OPEN OPEN[i] = list of tuple
+class BFS_OPEN:
+    def __init__(self)
+        self.OPEN = {i: [] for i in range(255)}
+
+    def insert(self, conf, potential):
+        self.OPEN[potential].insert(0, tuple(conf))
+
+    def first(self): # return tuple or none
+        first = None
+        for i in range(255):
+            if self.OPEN[i] == []:
+                pass
+            elif self.OPEN[i]:
+                EMPTY = False
+                first = self.OPEN[i][0]
+                sefl.OPEN[i].remove(first)
+                return first
+        return first
+
+#--Best First Search Tree T[i] = list of tuple
+class BFS_T:
+    def __init__(self):
+        self.T = {i: [] for i in range(255)}
+        self.path = []
+
+    def insert_root(self, conf, potential):
+        self.T[potential].insert(0, [tuple(conf)])
+
+    def insert(self, conf, potential, source): # source = (potential, index of source in T[i])
+        self.T[potential].insert(len(self.T[potential])+1 , [tuple(conf), source])
+
+    def search(self, conf, potential):
+        index = list(map(lambda x: x[0]==tuple(conf), self.T[potential]))
+        if sum(index)==0:
+            return False
+        else:
+            index = [ index[i] * i for i in range(len(index)) ]
+            return (int(poteintial), sum(index))
+
+    def trace(self, where_in_T): # where_in_T = (potential, index in T[i])
+        self.path.insert(0, self.T[where_in_T[0]] [where_in_T[1]] [0])
+        if len(self.T[where_in_T[0]] [where_in_T[1]]) > 1:
+            self.trace(self.T[where_in_T[0]] [where_in_T[1]] [1])
+
+#--Best First Search main
+
 #objects_setup------------------------------------------------------------------
 
 #--objects
@@ -111,6 +158,49 @@ class robots:
         for i in range(self.n_polygon):
             pygame.draw.polygon(game, color, numpy.array(self.display_polygon[i]), width)
 
+    def BFS(self, robot_goal, U_dist):
+        def conf_potential(conf):
+            potential = [tuple(TR(robot_recent.world_control[i].reshape((1,2)), numpy.array(conf)).reshape((2,)).astype(int)) for i in range(self.n_control)]
+            potential = [U_dist[i+1][127-potential[i][1], potential[i][0]] for i in range(self.n_control)]
+            potential = int(min(potential))
+            return potential
+
+        OPEN = BFS_OPEN()
+        T = BFS_T()
+
+        delta = []
+        for dx in (1,0,-1):
+            for dy in (1,0,-1):
+                for theta in (1,0,-1):
+                        delta.insert(0, (dx,dy,theta))
+        delta.remove((0,0,0))
+
+        temp = tuple(self.planning_conf)
+        potential = conf_potential(temp)
+        OPEN.insert(temp, potential)
+        T.insert_root(temp, potential)
+
+        SUCCESS = False
+        while not SUCCESS:
+            temp = OPEN.first()
+            if temp == None:
+                SUCCESS = False
+                break
+            source = T.search(temp, conf_potential(temp))
+            for neighbor in delta:
+                neighbor_conf = tuple(numpy.array(temp)+numpy.array(delta))
+                potential = conf_potential(neighbor_conf)
+                visited = T.search(neighbor_conf, potential)
+                if potential<260 and visited != False:
+                    T.insert(neighbor_conf, potential, source)
+                    OPEN.insert(neighbor_conf, potential)
+                if neighbor_conf == tuple(robot_goal.planning_conf):
+                    SUCCESS = True
+                    T.trace(self.T.search(neighbor_conf, potential))
+                    break
+
+            
+class robots_goal(robots):
     def NF1(self):
         U = {0: numpy.ones(128*128).reshape(128,128) * 255 } #initial potential = 255
         for obstacle in display_objects[2:]: #obstacle potential = 260
@@ -146,10 +236,7 @@ class robots:
                                 L[1] += [(q+(0,0,theta)).astype(int)]
                 L[0] = L[1]
                 order += 1
-        U_total = U[1]
-        for n in range(self.n_control-1):
-            U_total = numpy.maximum(U_total, U[2+n])
-        print(U_total)
+        return U
 
 class obstacles:
     def __init__(self, conf, n_polygon, vertices):
@@ -223,7 +310,7 @@ robots0_recent = robots(conf = [64, 64, 90], n_polygon = 2, \
                 vertices = [[[15,4], [-3,4], [-3,-4], [15,-4]], [[7,4], [11,4], [11,8], [7,8]]], \
                 n_control = 2, control = [[12,10], [-2,0]])
 
-robots0_goal = robots(conf = [80,80,0], n_polygon = 2, \
+robots0_goal = robots_goal(conf = [80,80,0], n_polygon = 2, \
                 vertices = [[[15,4], [-3,4], [-3,-4], [15,-4]], [[7,4], [11,4], [11,8], [7,8]]], \
                 n_control = 2, control = [[12,10], [-2,0]])
 
@@ -231,7 +318,7 @@ robots1_recent = robots(conf = [20, 20, 90], n_polygon = 1, \
                 vertices = [[[-5,-5], [5,-5], [0,5]]], \
                 n_control = 2, control = [[0,-4], [0,4]])
 
-robots1_goal = robots(conf = [30,100,0], n_polygon = 1, \
+robots1_goal = robots_goal(conf = [30,100,0], n_polygon = 1, \
                 vertices = [[[-5,-5], [5,-5], [0,5]]], \
                 n_control = 2, control = [[0,-4], [0,4]])
 
