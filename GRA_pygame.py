@@ -20,7 +20,7 @@ box_edge = numpy.array([[0,0], [0,127], [127,127], [127,0]])
 #--convert planning vertices into display vertices (x, y) => (x*scale, H-y*scale)
 #----matrix <- numpy.array (1D/2D)
 def planning_to_display(matrix):
-    return matrix.dot(numpy.matrix([[scale,0],[0,-scale]])) + numpy.array([0, display_height])
+    return matrix.dot(numpy.array([[scale,0],[0,-scale]])) + numpy.array([0, display_height])
 
 #--convert display vertices into planning vertices (x, y) => (x/scale, (H-y)/scale)
 #----matrix <- numpy.matrix (1D/2D)
@@ -36,12 +36,26 @@ def TR(matrix, xytheta):
     temp = temp.dot(numpy.array([[math.cos(theta), math.sin(theta),0], [-math.sin(theta), math.cos(theta),0], [dx, dy, 1]]))
     return temp[:,:2]
 
+#--standarize the angle into (-180, 180)
+#----angle <- degrees
+def angle_standarize(angle):
+    if -180<=angle<=180:
+        return angle
+    elif angle>180:
+        angle %= 360
+        return angle-360
+    elif angle<-180:
+        angle %= 360
+        return angle+360
+
 #--angle_compute
 #----vector1 <- list / numpy.array (1D); vector2 <- list / numpy.array (1D)
 def get_angle(vector1, vector2):
     vector1 = vector1.reshape((2,))
     vector2 = vector2.reshape((2,))
-    return math.degrees(math.atan2(vector2[1], vector2[0]) - math.atan2(vector1[1], vector1[0]))
+    angle = math.degrees(math.atan2(vector2[1], vector2[0]) - math.atan2(vector1[1], vector1[0]))
+    angle = angle_standarize(angle)
+    return angle
 
 #--assign the point in obstacles or not; point as matrix, edge as xytheta
 #----vector_of_point <- list / numpy.array (1D); vector_of_edge <- list / numpy.array(1D)
@@ -49,30 +63,53 @@ def point_left(vector_of_point, vector_of_edge):
     temp = TR(numpy.array(vector_of_point).reshape((1,2)), [0,0,-math.degrees(math.atan2(vector_of_edge[1], vector_of_edge[0]))])
     return temp[0,1] >= 0
 
-#--Best First Search OPEN OPEN[i] = list of tuple
+#--detect the intersection of two line segment
+#----segment1, segment2 <- numpy.array (2D)
+def intersect_segment(segment1, segment2):
+    temp1 = numpy.array([segment1[0], segment1[0]])
+    temp1 = (segment1[1,:] - segment1[0,:]).dot(numpy.array([[0,-1], [1,0]])).dot(segment2.T - temp1.T).prod()
+    temp2 = numpy.array([segment2[0], segment2[0]])
+    temp2 = (segment2[1,:] - segment2[0,:]).dot(numpy.array([[0,-1], [1,0]])).dot(segment1.T - temp2.T).prod()
+    if temp1 < 0 and temp2 < 0:
+        return True
+    else:
+        return False
+
+#----polygon1, polygon2 <- numpy.array (2D)
+def intersect_polygon(polygon1, polygon2):
+    polygon1 = numpy.append(polygon1, polygon1[0].reshape(1,2), axis=0)
+    polygon2 = numpy.append(polygon2, polygon2[0].reshape(1,2), axis=0)
+    for i in range(len(polygon1)-1):
+        for j in range(len(polygon2)-1):
+            if intersect_segment(polygon1[i:i+2], polygon2[j:j+2]) == True:
+                return True
+            else:
+                pass
+    return False
+
+#--Best First Search OPEN OPEN[i] = list of tuple(conf)
 class BFS_OPEN:
-    def __init__(self)
-        self.OPEN = {i: [] for i in range(255)}
+    def __init__(self):
+        self.OPEN = {i: [] for i in range(510)}
 
     def insert(self, conf, potential):
         self.OPEN[potential].insert(0, tuple(conf))
 
     def first(self): # return tuple or none
-        first = None
-        for i in range(255):
+        FIRST = None
+        for i in range(510):
             if self.OPEN[i] == []:
                 pass
             elif self.OPEN[i]:
-                EMPTY = False
-                first = self.OPEN[i][0]
-                sefl.OPEN[i].remove(first)
-                return first
+                FIRST = self.OPEN[i][0]
+                self.OPEN[i] = self.OPEN[i][1:]
+                return FIRST
         return first
 
-#--Best First Search Tree T[i] = list of tuple
+#--Best First Search Tree T[i] = list of [tuple(conf), (potential_of_source, index_of_source_in_T[potential])]
 class BFS_T:
     def __init__(self):
-        self.T = {i: [] for i in range(255)}
+        self.T = {i: [] for i in range(521)}
         self.path = []
 
     def insert_root(self, conf, potential):
@@ -87,14 +124,164 @@ class BFS_T:
             return False
         else:
             index = [ index[i] * i for i in range(len(index)) ]
-            return (int(poteintial), sum(index))
+            return (int(potential), sum(index))
 
-    def trace(self, where_in_T): # where_in_T = (potential, index in T[i])
+    def trace(self, where_in_T): # where_in_T = (potential, index in T[i]) of goal
         self.path.insert(0, self.T[where_in_T[0]] [where_in_T[1]] [0])
         if len(self.T[where_in_T[0]] [where_in_T[1]]) > 1:
             self.trace(self.T[where_in_T[0]] [where_in_T[1]] [1])
 
-#--Best First Search main
+#--Best First Search NF1
+def NF1():
+    global display_objects
+
+    U = {0: numpy.ones(128*128).reshape(128,128) * 255 } #initial potential = 255
+    for obstacle in display_objects[2:]: #obstacle potential = 260
+        for x in range(obstacle.planning_bounding_box[0,0], obstacle.planning_bounding_box[1,0]+1):
+            for y in range(obstacle.planning_bounding_box[0,1], obstacle.planning_bounding_box[1,1]+1):
+                if obstacle.point_inside([x,y]):
+                    U[0][127-y,x] = 260
+    for n in range(display_objects[1].n_control):
+        U[n] = U[0].copy()
+
+    for n in range(display_objects[1].n_control):
+        U[n] = U[0].copy()
+        U[n][127-display_objects[1].planning_control[n][1], display_objects[1].planning_control[n][0]] = 0
+        L = {0: [numpy.array([0,0,0])], 1: []} #(dx,dy, delta theta) based on display_objects[1].planning_control[n,:]
+        order = 0
+
+        while L[0]: # L[0] is not empty --> return True
+            L[1] = []
+            for q in L[0]:
+
+                for dx in (1,-1):
+                    control = TR(display_objects[1].world_control[n].reshape((1,2)), (display_objects[1].planning_conf+q+(dx,0,0))).reshape((2,)).astype(int)
+                    if 0<=control[0]<=127 and 0<=control[1]<=127: #bounded
+                        if (U[n][127-control[1], control[0]] == 255):
+                            U[n][127-control[1], control[0]] = order + 1
+                            L[1] += [(q+(dx,0,0)).astype(int)]
+
+                for dy in (1,-1):
+                    control = TR(display_objects[1].world_control[n].reshape((1,2)), (display_objects[1].planning_conf+q+(0,dy,0))).reshape((2,)).astype(int)
+                    if 0<=control[0]<=127 and 0<=control[1]<=127: #bounded
+                        if (U[n][127-control[1], control[0]] == 255):
+                            U[n][127-control[1], control[0]] = order + 1
+                            L[1] += [(q+(0,dy,0)).astype(int)]
+
+                for theta in (5,-5):
+                    control = TR(display_objects[1].world_control[n].reshape((1,2)), (display_objects[1].planning_conf+q+(0,0,theta))).reshape((2,)).astype(int)
+                    if 0<=control[0]<=127 and 0<=control[1]<=127: #bounded
+                        if (U[n][127-control[1], control[0]] == 255):
+                            U[n][127-control[1], control[0]] = order + 1
+                            L[1] += [(q+(0,0,theta)).astype(int)]
+            L[0] = L[1]
+            order += 1
+
+    display_objects[1].BFS_U = U
+    print("NF1 success")
+
+def NF1_show():
+    global display_objects
+
+    print(display_objects[1].BFS_U[0])
+
+#--Best First Search BFS
+def BFS():
+    global display_objects
+
+    U = display_objects[1].BFS_U
+    def conf_potential(conf):
+        potential = [tuple(TR(display_objects[0].world_control[i].reshape((1,2)), numpy.array(conf)).reshape((2,)).astype(int)) for i in range(display_objects[0].n_control)]
+        for control in potential:
+            if 0<=control[0]<=127 and 0<=control[1]<=127:
+                pass
+            else: # control point run out of bound
+                return 520
+        potential = [U[i][127-potential[i][1], potential[i][0]] for i in range(display_objects[0].n_control)]
+        potential = int(sum(potential))
+        return potential
+
+    def collision(conf):
+        polygon_robot = [TR(display_objects[0].world_polygon[i], numpy.array(conf)).astype(int) for i in range(display_objects[0].n_polygon)]
+        bounding_box = numpy.array(polygon_robot).flatten().astype(int)
+        bounding_box = bounding_box.reshape((int(bounding_box.size/2), 2))
+        bounding_box = numpy.array([bounding_box.min(0), bounding_box.max(0)])
+
+        for obstacle in display_objects[2:]:
+            #bounding_box intersect or not
+            if (bounding_box[0,0] < obstacle.planning_bounding_box[0,0] < bounding_box[1,0] and \
+            bounding_box[0,1] < obstacle.planning_bounding_box[0,1] < bounding_box[1,1]) or\
+            (obstacle.planning_bounding_box[0,0] < bounding_box[0,0] < obstacle.planning_bounding_box[1,0] and \
+            obstacle.planning_bounding_box[0,1] < bounding_box[0,1] < obstacle.planning_bounding_box[1,1]):
+                #polygon intersect or not
+                for polygon_obstacle_element in obstacle.planning_polygon:
+                    for polygon_robot_element in polygon_robot:
+                        if intersect_polygon(polygon_robot_element, polygon_obstacle_element):
+                            print("robot and obstacle intersect")
+                            return True
+                        else:
+                            pass
+            else:
+                pass
+        return False
+
+    OPEN = BFS_OPEN()
+    T = BFS_T()
+
+    delta = []
+    for dx in (1,0,-1):
+        for dy in (1,0,-1):
+            for theta in (5,0,-5):
+                    delta.insert(0, (dx,dy,theta))
+    delta.remove((0,0,0))
+
+    FIRST = tuple(display_objects[0].planning_conf.astype(int)) #insure the conf in OPEN and T are integer
+    potential = conf_potential(FIRST)
+    OPEN.insert(FIRST, potential)
+    T.insert_root(FIRST, potential)
+
+    SUCCESS = False
+    while not SUCCESS:
+        FIRST = OPEN.first()
+        if FIRST == None:
+            SUCCESS = False
+            break
+        source = T.search(FIRST, conf_potential(FIRST))
+        print(FIRST)
+        print(conf_potential(FIRST))
+        for neighbor in delta:
+            neighbor_conf = tuple(numpy.array(FIRST)+numpy.array(neighbor))
+            potential = conf_potential(neighbor_conf)
+            visited = T.search(neighbor_conf, potential)
+            if potential<520 and visited == False and -180 <= neighbor_conf[-1] <= 180:
+                if collision(neighbor_conf) == False:
+                    T.insert(neighbor_conf, potential, source)
+                    OPEN.insert(neighbor_conf, potential)
+            if potential <= 2:
+                SUCCESS = True
+                T.trace(where_in_T = (potential, -1))
+                T.path.insert(len(T.path)+1, tuple(display_objects[1].planning_conf))
+                break
+
+    if SUCCESS:
+        display_objects[1].BFS_path = T.path
+        print("BFS success")
+    elif not SUCCESS:
+        print("BFS fail")
+
+def BFS_show():
+    global display_objects
+    global polygon_buffer
+    global polygon_buffer_var
+
+    polygon_buffer = display_objects[1].BFS_path
+    polygon_buffer = list(map(lambda x: [TR(display_objects[1].world_polygon[i], numpy.array(x)) for i in range(display_objects[1].n_polygon)], polygon_buffer))
+    polygon_buffer = list(map(lambda x: [planning_to_display(segment) for segment in x], polygon_buffer))
+    polygon_buffer_var = True
+
+def CLEAR():
+    global polygon_buffer_var
+    polygon_buffer_var = False
 
 #objects_setup------------------------------------------------------------------
 
@@ -111,18 +298,22 @@ class robots:
         self.world_control = numpy.array(control) #<----fixed
 
         self.planning_conf = self.world_conf #<----flexible
-        self.planning_polygon = [TR(self.world_polygon[i], self.planning_conf).astype(int) for i in range(self.n_polygon)]
+        self.planning_conf[-1] = angle_standarize(self.planning_conf[-1])
+        self.planning_polygon = [TR(self.world_polygon[i], self.planning_conf) for i in range(self.n_polygon)]
         self.planning_control = TR(self.world_control, self.planning_conf).astype(int)
-        
+
         self.planning_bounding_box = numpy.array(self.planning_polygon).flatten().astype(int)
         self.planning_bounding_box = self.planning_bounding_box.reshape((int(self.planning_bounding_box.size/2), 2))
         self.planning_bounding_box = numpy.array([self.planning_bounding_box.min(0), self.planning_bounding_box.max(0)])
 
         self.display_polygon = [planning_to_display(polygon) for polygon in self.planning_polygon]
-        
+
         self.display_bounding_box = numpy.array(self.display_polygon).flatten().astype(int)
         self.display_bounding_box = self.display_bounding_box.reshape((int(self.display_bounding_box.size/2), 2))
         self.display_bounding_box = numpy.array([self.display_bounding_box.min(0), self.display_bounding_box.max(0)])
+
+        self.BFS_U = {}
+        self.BFS_path = []
 
     def mouse_inside(self, mouse_position): #mouse_position <- list (1D)
         if mouse_position[0] in range(self.display_bounding_box[0,0], self.display_bounding_box[1,0])\
@@ -141,9 +332,9 @@ class robots:
             position2 = (display_to_planning(position2) - self.planning_conf[:2])
             move = get_angle(position1, position2)
             self.planning_conf[-1] += move
-            self.planning_conf[-1] %= 360
+            self.planning_conf[-1] = angle_standarize(self.planning_conf[-1])
 
-        self.planning_polygon = [TR(self.world_polygon[i], self.planning_conf).astype(int) for i in range(self.n_polygon)]
+        self.planning_polygon = [TR(self.world_polygon[i], self.planning_conf) for i in range(self.n_polygon)]
         self.planning_control = TR(self.world_control, self.planning_conf).astype(int)
         self.planning_bounding_box = numpy.array(self.planning_polygon).flatten().astype(int)
         self.planning_bounding_box = self.planning_bounding_box.reshape((int(self.planning_bounding_box.size/2), 2))
@@ -158,86 +349,6 @@ class robots:
         for i in range(self.n_polygon):
             pygame.draw.polygon(game, color, numpy.array(self.display_polygon[i]), width)
 
-    def BFS(self, robot_goal, U_dist):
-        def conf_potential(conf):
-            potential = [tuple(TR(robot_recent.world_control[i].reshape((1,2)), numpy.array(conf)).reshape((2,)).astype(int)) for i in range(self.n_control)]
-            potential = [U_dist[i+1][127-potential[i][1], potential[i][0]] for i in range(self.n_control)]
-            potential = int(min(potential))
-            return potential
-
-        OPEN = BFS_OPEN()
-        T = BFS_T()
-
-        delta = []
-        for dx in (1,0,-1):
-            for dy in (1,0,-1):
-                for theta in (1,0,-1):
-                        delta.insert(0, (dx,dy,theta))
-        delta.remove((0,0,0))
-
-        temp = tuple(self.planning_conf)
-        potential = conf_potential(temp)
-        OPEN.insert(temp, potential)
-        T.insert_root(temp, potential)
-
-        SUCCESS = False
-        while not SUCCESS:
-            temp = OPEN.first()
-            if temp == None:
-                SUCCESS = False
-                break
-            source = T.search(temp, conf_potential(temp))
-            for neighbor in delta:
-                neighbor_conf = tuple(numpy.array(temp)+numpy.array(delta))
-                potential = conf_potential(neighbor_conf)
-                visited = T.search(neighbor_conf, potential)
-                if potential<260 and visited != False:
-                    T.insert(neighbor_conf, potential, source)
-                    OPEN.insert(neighbor_conf, potential)
-                if neighbor_conf == tuple(robot_goal.planning_conf):
-                    SUCCESS = True
-                    T.trace(self.T.search(neighbor_conf, potential))
-                    break
-
-            
-class robots_goal(robots):
-    def NF1(self):
-        U = {0: numpy.ones(128*128).reshape(128,128) * 255 } #initial potential = 255
-        for obstacle in display_objects[2:]: #obstacle potential = 260
-            for x in range(obstacle.planning_bounding_box[0,0], obstacle.planning_bounding_box[1,0]+1):
-                for y in range(obstacle.planning_bounding_box[0,1], obstacle.planning_bounding_box[1,1]+1):
-                    if obstacle.point_inside([x,y]):
-                        U[0][127-y,x] = 260
-
-        for n in range(self.n_control):
-            U[n+1] = U[0].copy()
-            U[n+1][128-self.planning_control[n][1], self.planning_control[n][0]] = 0
-            L = {0: [numpy.array([0,0,0])], 1: []} #(dx,dy, delta theta) based on self.planning_control[n,:]
-            order = 0
-            while L[0]: # L[0] is not empty --> return True
-                L[1] = []
-                for q in L[0]:
-                    control = TR(self.world_control[n].reshape((1,2)), (self.planning_conf+q)).reshape((2,)).astype(int) #current control point (x,y) <- numpy.array (1D)
-                    for dx in (1,-1):
-                        if (0<= (control[0]+dx) <=127): #bounded
-                            if (U[n+1][127-control[1], control[0]+dx] == 255):
-                                U[n+1][127-control[1], control[0]+dx] = order + 1
-                                L[1] += [(q+(dx,0,0)).astype(int)]
-                    for dy in (1,-1):
-                        if (0<= (control[1]+dy) <=127): #bounded
-                            if (U[n+1][127-control[1]-dy, control[0]] == 255):
-                                U[n+1][127-control[1]-dy, control[0]] = order + 1
-                                L[1] += [(q+(0,dy,0)).astype(int)]
-                    for theta in (1,-1):
-                        control = TR(self.world_control[n].reshape((1,2)), (self.planning_conf+q+(0,0,theta))).reshape((2,)).astype(int)
-                        if (0,0)<= tuple(control) <=(127,127):
-                            if (U[n+1][127-control[1], control[0]] == 255):
-                                U[n+1][127-control[1], control[0]] = order + 1
-                                L[1] += [(q+(0,0,theta)).astype(int)]
-                L[0] = L[1]
-                order += 1
-        return U
-
 class obstacles:
     def __init__(self, conf, n_polygon, vertices):
         self.n_polygon = n_polygon
@@ -245,14 +356,15 @@ class obstacles:
         self.world_polygon = [numpy.array(vertices[i]) for i in range(self.n_polygon)] #<----fixed
 
         self.planning_conf = self.world_conf
-        self.planning_polygon = [TR(self.world_polygon[i], self.planning_conf).astype(int) for i in range(self.n_polygon)]
+        self.planning_conf[-1] = angle_standarize(self.planning_conf[-1])
+        self.planning_polygon = [TR(self.world_polygon[i], self.planning_conf) for i in range(self.n_polygon)]
         
         self.planning_bounding_box = numpy.array(self.planning_polygon).flatten().astype(int)
         self.planning_bounding_box = self.planning_bounding_box.reshape((int(self.planning_bounding_box.size/2), 2))
         self.planning_bounding_box = numpy.array([self.planning_bounding_box.min(0), self.planning_bounding_box.max(0)])
 
         self.display_polygon = [planning_to_display(polygon) for polygon in self.planning_polygon]
-        
+
         self.display_bounding_box = numpy.array(self.display_polygon).flatten().astype(int)
         self.display_bounding_box = self.display_bounding_box.reshape((int(self.display_bounding_box.size/2), 2))
         self.display_bounding_box = numpy.array([self.display_bounding_box.min(0), self.display_bounding_box.max(0)])
@@ -285,9 +397,9 @@ class obstacles:
             position2 = (display_to_planning(position2) - self.planning_conf[:2])
             move = get_angle(position1, position2)
             self.planning_conf[-1] += move
-            self.planning_conf[-1] %= 360
+            self.planning_conf[-1] = angle_standarize(self.planning_conf[-1])
 
-        self.planning_polygon = [TR(self.world_polygon[i], self.planning_conf).astype(int) for i in range(self.n_polygon)]
+        self.planning_polygon = [TR(self.world_polygon[i], self.planning_conf) for i in range(self.n_polygon)]
         self.planning_bounding_box = numpy.array(self.planning_polygon).flatten().astype(int)
         self.planning_bounding_box = self.planning_bounding_box.reshape((int(self.planning_bounding_box.size/2), 2))
         self.planning_bounding_box = numpy.array([self.planning_bounding_box.min(0), self.planning_bounding_box.max(0)])
@@ -310,7 +422,7 @@ robots0_recent = robots(conf = [64, 64, 90], n_polygon = 2, \
                 vertices = [[[15,4], [-3,4], [-3,-4], [15,-4]], [[7,4], [11,4], [11,8], [7,8]]], \
                 n_control = 2, control = [[12,10], [-2,0]])
 
-robots0_goal = robots_goal(conf = [80,80,0], n_polygon = 2, \
+robots0_goal = robots(conf = [80,80,0], n_polygon = 2, \
                 vertices = [[[15,4], [-3,4], [-3,-4], [15,-4]], [[7,4], [11,4], [11,8], [7,8]]], \
                 n_control = 2, control = [[12,10], [-2,0]])
 
@@ -318,7 +430,7 @@ robots1_recent = robots(conf = [20, 20, 90], n_polygon = 1, \
                 vertices = [[[-5,-5], [5,-5], [0,5]]], \
                 n_control = 2, control = [[0,-4], [0,4]])
 
-robots1_goal = robots_goal(conf = [30,100,0], n_polygon = 1, \
+robots1_goal = robots(conf = [30,100,0], n_polygon = 1, \
                 vertices = [[[-5,-5], [5,-5], [0,5]]], \
                 n_control = 2, control = [[0,-4], [0,4]])
 
@@ -331,31 +443,41 @@ obstacles1 = obstacles(conf = [90, 51, 3.75], n_polygon = 1, \
 obstacles2 = obstacles(conf = [56,30,90], n_polygon = 2, \
             vertices = [[[9,-3], [9,6], [-11,6], [-11,-3]],[[1,6], [1,10], [-2,10], [-2,6]]])
 
+#global variable
 display_objects = [robots0_recent, robots0_goal, obstacles0, obstacles1, obstacles2]
-
+polygon_buffer = []
+polygon_buffer_var = False
 
 #tkinter_initialization--------------------------------------------------------
 root = tkinter.Tk()
 root.title("Motion Planning - Control Board")
-pygame_win = tkinter.Frame(root, width = 200, height = 200, background="gray14")
-pygame_win.pack(fill=tkinter.X, padx=100, pady=100)
+#pygame_win = tkinter.Frame(root, width = 200, height = 200, background="gray14")
+#pygame_win.pack(fill=tkinter.BOTH, padx=100, pady=100)
 
 ##Label, Checkbotton, Botton
 check = tkinter.BooleanVar()
-Check_lock = tkinter.Checkbutton(pygame_win, text="Lock", variable=check, width=10)
+Check_lock = tkinter.Checkbutton(root, text="Lock", variable=check, width=10)
 
-option_var = tkinter.StringVar(pygame_win)
+option_var = tkinter.StringVar(root)
 option_var.set("robot #0")
-Option = tkinter.OptionMenu(pygame_win, option_var, "robot #0", "robot #1")
+Option = tkinter.OptionMenu(root, option_var, "robot #0", "robot #1")
 
-Button_NF1 = tkinter.Button(pygame_win, text="Show NF1", command = display_objects[1].NF1)
+Button_NF1 = tkinter.Button(root, text="Run NF1", command = NF1, fg='white', bg='black')
+Button_NF1_show = tkinter.Button(root, text="Show NF1", command = NF1_show, fg='yellow', bg='black')
+Button_BFS = tkinter.Button(root, text="Run BFS", command = BFS, fg='white', bg='black')
+Button_BFS_show = tkinter.Button(root, text="Show BFS", command = BFS_show, fg='yellow', bg='black')
+Button_clear = tkinter.Button(root, text="CLEAR", command = CLEAR, fg='yellow', bg='blue')
 
 Check_lock.pack(fill=tkinter.Y, side=tkinter.LEFT, expand=1)
 Option.pack(fill=tkinter.BOTH, expand=1)
 Button_NF1.pack(fill=tkinter.BOTH, expand=1)
+Button_NF1_show.pack(fill=tkinter.BOTH, expand=1)
+Button_BFS.pack(fill=tkinter.BOTH, expand=1)
+Button_BFS_show.pack(fill=tkinter.BOTH, expand=1)
+Button_clear.pack(fill=tkinter.BOTH, expand=1)
 
 ##embed pygame into tkinter
-os.environ['SDL_WINDOWID'] = str(pygame_win.winfo_id())
+os.environ['SDL_WINDOWID'] = str(root.winfo_id())
 if platform.system() == 'Darwin': # <- for Mac OS
     os.environ['SDL_VIDEODRIVER'] = 'Quartz' 
 elif platform.system() == 'Windows': # <- for Windows
@@ -374,20 +496,22 @@ pygame.display.set_caption('Motion Planning - Displaying board')
 clock = pygame.time.Clock()
 
 def main():
+    global display_objects
+    global polygon_buffer
+    global polygon_buffer_var
 
     while True:
+
         event = pygame.event.poll()
         if event.type == pygame.QUIT:
             pygame.quit()
             root.quit()
             quit()
-        
+
         if option_var.get() == "robot #0":
             display_objects = [robots0_recent, robots0_goal, obstacles0, obstacles1, obstacles2]
-            Button_NF1.config(command = robots0_goal.NF1)
         else:
             display_objects = [robots1_recent, robots1_goal, obstacles0, obstacles1, obstacles2]
-            Button_NF1.config(command = robots1_goal.NF1)
 
 #mouse_control-----------------------------------------------------------------
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1: #mouse_left
@@ -432,6 +556,11 @@ def main():
 
         for object in display_objects[2:]: #draw obstacle
             object.display_draw(gameDisplay, red)
+
+        if polygon_buffer_var == True:
+            for segment in polygon_buffer:
+                for i in range(len(segment)):
+                    pygame.draw.polygon(gameDisplay, blue, numpy.array(segment[i]), 1)
 
         pygame.display.update()
         root.update()
