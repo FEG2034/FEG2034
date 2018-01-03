@@ -16,6 +16,8 @@ from google.cloud.bigquery import job
 #PySpark
 from pyspark import SparkConf, SparkContext
 from pyspark.sql import SQLContext
+from pyspark.sql.functions import udf
+import pyspark.sql.types
 
 timestamp_main = datetime.datetime.now()
 
@@ -26,7 +28,7 @@ search_event = int(sys.argv[3])
 # Part(2) Query the data from GDELT to our own BigQuery Project-id.Dataset.Table--------------------
 timestamp_Part2 = datetime.datetime.now()
 
-DATASET_BigQuery = "DS_final"
+DATASET_BigQuery = "DS_GDELT_dataset"
 TABLE_BigQuery = "GDELT_" + str(search_event) + "_" + timestamp_Part2.strftime("%Y%m%d%H%M%S")
 SCHEMA_BigQuery = [ bigquery.SchemaField("Actor1CountryCode", "string"), bigquery.SchemaField("Actor2CountryCode", "string") ]
 
@@ -57,8 +59,8 @@ conf = SparkConf()
 sc = SparkContext(conf = conf)
 SQLCtx = SQLContext(sc)
 
-project_GCP = "testbigqueryforgdelt"#sc._jsc.hadoopConfiguration().get('fs.gs.project.id')
-bucket_GCP = "dataproc-9ca6db64-3885-4b1b-9169-e96fc1553b9a-asia-east1"#sc._jsc.hadoopConfiguration().get('fs.gs.system.bucket')
+project_GCP = sc._jsc.hadoopConfiguration().get('fs.gs.project.id')
+bucket_GCP = sc._jsc.hadoopConfiguration().get('fs.gs.system.bucket')
 input_directory = 'gs://{}/pyspark_input'.format(bucket_GCP)
 
 conf_BQ = {
@@ -90,6 +92,16 @@ timecost_Part3 = (datetime.datetime.now() - timestamp_Part3).total_seconds()
 # Part(4) running pagerank with networkx------------------------------------------------------------
 timestamp_Part4 = datetime.datetime.now()
 
+#def PR(edge):
+#    G = nx.DiGraph()
+#    def insert_edge(x):
+#        if G.has_edge(x["Actor1CountryCode"], x["Actor2CountryCode"]):
+#            G[x["Actor1CountryCode"]][x["Actor2CountryCode"]]["weight"] +=1
+#        else:
+#            G.add_edge(x["Actor1CountryCode"], x["Actor2CountryCode"], weight=1)
+#    edge.map(insert_edge).collect()
+#    return list(nx.pagerank(G).item())
+
 def PR(edge):
     G = nx.DiGraph()
     G.add_edges_from(list(edge))
@@ -98,7 +110,7 @@ def PR(edge):
 Pagerank = input_rdd.mapPartitions(lambda x: PR(x))
 Pagerank_result = Pagerank.reduceByKey(lambda x,y: x+y).collect()
 
-ShowOff = SQLCtx.createDataFrame(Pagerank_result).toDF("Country", "Pagerank").orderBy(["Pagerank", "Country"])
+ShowOff = SQLCtx.createDataFrame(Pagerank_result).toDF("Country", "Pagerank").orderBy(["Pagerank", "Country"], ascending=[False, True])
 
 timecost_Part4 = (datetime.datetime.now() - timestamp_Part4).total_seconds()
 
@@ -108,8 +120,8 @@ input_path = sc._jvm.org.apache.hadoop.fs.Path(input_directory)
 input_path.getFileSystem(sc._jsc.hadoopConfiguration()).delete(input_path, True)
 
 # Final show off result in DateFrame and time cost--------------------------------------------------
-print ("Time cost: {} (seconds) for BigQuery (from GDELT project to our own project)".format(str(timecost_Part2)))
-print ("Time cost: {} (seconds) for extracting data from BigQuery to Cloud Storage".format(str(timecost_Part3)))
-print ("Time cost: {} (seconds) for running pagerank with networkx (5 partition)".format(str(timecost_Part4)))
-print ("Time cost: {} (seconds) for the whole process".format(str((datetime.datetime.now()-timestamp_main))))
+print "Time cost: {} (seconds) for BigQuery (from GDELT project to our own project)".format(str(timecost_Part2))
+print "Time cost: {} (seconds) for extracting data from BigQuery to Cloud Storage".format(str(timecost_Part3))
+print "Time cost: {} (seconds) for running pagerank with networkx (5 partition)".format(str(timecost_Part4))
+print "Time cost: {} (seconds) for the whole process".format(str((datetime.datetime.now()-timestamp_main)))
 ShowOff.show(n=10)
