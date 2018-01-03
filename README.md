@@ -4,8 +4,7 @@
 ==================
 terminal command: spark-submit GDELT_online.py YYYYMMDD YYYYMMDD event_number  
 ex: spark-submit GDELT_online.py 20170303 20170303 19  
-  
-只要修改變數：DATASET_BigQuery，就可以用在不同的 GCP 帳戶上使用
+只要修改變數：DATASET_BigQuery，就可以用在不同的 GCP 帳戶上使用  
 ---
 About DSFinalGUI
 * ### 1. Website based on Django 1.11 and Python 2.7
