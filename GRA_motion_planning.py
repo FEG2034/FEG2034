@@ -75,6 +75,7 @@ def intersect_segment(segment1, segment2):
     else:
         return False
 
+#--detect the intersection of two polygon
 #----polygon1, polygon2 <- numpy.array (2D)
 def intersect_polygon(polygon1, polygon2):
     polygon1 = numpy.append(polygon1, polygon1[0].reshape(1,2), axis=0)
@@ -90,26 +91,26 @@ def intersect_polygon(polygon1, polygon2):
 #--Best First Search OPEN OPEN[i] = list of tuple(conf)
 class BFS_OPEN:
     def __init__(self):
-        self.OPEN = {i: [] for i in range(510)}
+        self.OPEN = {i: [] for i in range(255)}
 
     def insert(self, conf, potential):
         self.OPEN[potential].insert(0, tuple(conf))
 
     def first(self): # return tuple or none
-        FIRST = None
-        for i in range(510):
+        FIRST_var = None
+        for i in range(255):
             if self.OPEN[i] == []:
                 pass
             elif self.OPEN[i]:
-                FIRST = self.OPEN[i][0]
+                FIRST_var = self.OPEN[i][0]
                 self.OPEN[i] = self.OPEN[i][1:]
-                return FIRST
-        return first
+                return FIRST_var
+        return FIRST_var
 
 #--Best First Search Tree T[i] = list of [tuple(conf), (potential_of_source, index_of_source_in_T[potential])]
 class BFS_T:
     def __init__(self):
-        self.T = {i: [] for i in range(521)}
+        self.T = {i: [] for i in range(261)}
         self.path = []
 
     def insert_root(self, conf, potential):
@@ -196,25 +197,26 @@ def BFS():
             if 0<=control[0]<=127 and 0<=control[1]<=127:
                 pass
             else: # control point run out of bound
-                return 520
+                return 260
         potential = [U[i][127-potential[i][1], potential[i][0]] for i in range(display_objects[0].n_control)]
-        potential = int(sum(potential))
+        potential = int(sum(potential)/display_objects[0].n_control)
         return potential
 
-    def collision(conf):
-        polygon_robot = [TR(display_objects[0].world_polygon[i], numpy.array(conf)).astype(int) for i in range(display_objects[0].n_polygon)]
+    def collision(conf): # problem: we can't correctly detect collision with planning_polygon
+        polygon_robot = [TR(display_objects[0].world_polygon[i], numpy.array(conf)) for i in range(display_objects[0].n_polygon)]
+        polygon_robot = [planning_to_display(polygon) for polygon in polygon_robot]
         bounding_box = numpy.array(polygon_robot).flatten().astype(int)
         bounding_box = bounding_box.reshape((int(bounding_box.size/2), 2))
         bounding_box = numpy.array([bounding_box.min(0), bounding_box.max(0)])
 
         for obstacle in display_objects[2:]:
             #bounding_box intersect or not
-            if (bounding_box[0,0] < obstacle.planning_bounding_box[0,0] < bounding_box[1,0] and \
-            bounding_box[0,1] < obstacle.planning_bounding_box[0,1] < bounding_box[1,1]) or\
-            (obstacle.planning_bounding_box[0,0] < bounding_box[0,0] < obstacle.planning_bounding_box[1,0] and \
-            obstacle.planning_bounding_box[0,1] < bounding_box[0,1] < obstacle.planning_bounding_box[1,1]):
+            if (bounding_box[0,0] < obstacle.display_bounding_box[0,0] < bounding_box[1,0] and \
+            bounding_box[0,1] < obstacle.display_bounding_box[0,1] < bounding_box[1,1]) or \
+            (obstacle.display_bounding_box[0,0] < bounding_box[0,0] < obstacle.display_bounding_box[1,0] and \
+            obstacle.display_bounding_box[0,1] < bounding_box[0,1] < obstacle.display_bounding_box[1,1]):
                 #polygon intersect or not
-                for polygon_obstacle_element in obstacle.planning_polygon:
+                for polygon_obstacle_element in obstacle.display_polygon:
                     for polygon_robot_element in polygon_robot:
                         if intersect_polygon(polygon_robot_element, polygon_obstacle_element):
                             print("robot and obstacle intersect")
@@ -231,35 +233,35 @@ def BFS():
     delta = []
     for dx in (1,0,-1):
         for dy in (1,0,-1):
-            for theta in (5,0,-5):
+            for theta in (20,0,-20):
                     delta.insert(0, (dx,dy,theta))
     delta.remove((0,0,0))
 
-    FIRST = tuple(display_objects[0].planning_conf.astype(int)) #insure the conf in OPEN and T are integer
-    potential = conf_potential(FIRST)
-    OPEN.insert(FIRST, potential)
-    T.insert_root(FIRST, potential)
+    FIRST_conf = tuple(display_objects[0].planning_conf.astype(int)) #insure the conf in OPEN and T are integer
+    potential = conf_potential(FIRST_conf)
+    OPEN.insert(FIRST_conf, potential)
+    T.insert_root(FIRST_conf, potential)
 
     SUCCESS = False
     while not SUCCESS:
-        FIRST = OPEN.first()
-        if FIRST == None:
+        FIRST_conf = OPEN.first()
+        if FIRST_conf == None:
             SUCCESS = False
             break
-        source = T.search(FIRST, conf_potential(FIRST))
-        print(FIRST)
-        print(conf_potential(FIRST))
+        source = T.search(FIRST_conf, conf_potential(FIRST_conf))
+        print(FIRST_conf)
+        print(conf_potential(FIRST_conf))
         for neighbor in delta:
-            neighbor_conf = tuple(numpy.array(FIRST)+numpy.array(neighbor))
-            potential = conf_potential(neighbor_conf)
-            visited = T.search(neighbor_conf, potential)
-            if potential<520 and visited == False and -180 <= neighbor_conf[-1] <= 180:
+            neighbor_conf = tuple(numpy.array(FIRST_conf)+numpy.array(neighbor))
+            neighbor_potential = conf_potential(neighbor_conf)
+            visited = T.search(neighbor_conf, neighbor_potential)
+            if neighbor_potential<260 and visited == False and -180 <= neighbor_conf[-1] <= 180:
                 if collision(neighbor_conf) == False:
-                    T.insert(neighbor_conf, potential, source)
-                    OPEN.insert(neighbor_conf, potential)
-            if potential <= 2:
+                    T.insert(neighbor_conf, neighbor_potential, source)
+                    OPEN.insert(neighbor_conf, neighbor_potential)
+            if neighbor_potential <= 1:
                 SUCCESS = True
-                T.trace(where_in_T = (potential, -1))
+                T.trace(where_in_T = (neighbor_potential, -1))
                 T.path.insert(len(T.path)+1, tuple(display_objects[1].planning_conf))
                 break
 
