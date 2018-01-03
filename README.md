@@ -1,6 +1,6 @@
 # FEG2034
 
-《GDELT_online.py》
+《GDELT_PageRank.py》
 ==================
 terminal command: spark-submit GDELT_online.py YYYYMMDD YYYYMMDD event_number  
 ex: spark-submit GDELT_online.py 20170303 20170303 19  
