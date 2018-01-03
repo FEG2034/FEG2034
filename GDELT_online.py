@@ -26,7 +26,7 @@ search_event = int(sys.argv[3])
 # Part(2) Query the data from GDELT to our own BigQuery Project-id.Dataset.Table--------------------
 timestamp_Part2 = datetime.datetime.now()
 
-DATASET_BigQuery = "DS_GDELT_dataset"
+DATASET_BigQuery = "DS_final"
 TABLE_BigQuery = "GDELT_" + str(search_event) + "_" + timestamp_Part2.strftime("%Y%m%d%H%M%S")
 SCHEMA_BigQuery = [ bigquery.SchemaField("Actor1CountryCode", "string"), bigquery.SchemaField("Actor2CountryCode", "string") ]
 
@@ -57,8 +57,8 @@ conf = SparkConf()
 sc = SparkContext(conf = conf)
 SQLCtx = SQLContext(sc)
 
-project_GCP = sc._jsc.hadoopConfiguration().get('fs.gs.project.id')
-bucket_GCP = sc._jsc.hadoopConfiguration().get('fs.gs.system.bucket')
+project_GCP = "testbigqueryforgdelt"#sc._jsc.hadoopConfiguration().get('fs.gs.project.id')
+bucket_GCP = "dataproc-9ca6db64-3885-4b1b-9169-e96fc1553b9a-asia-east1"#sc._jsc.hadoopConfiguration().get('fs.gs.system.bucket')
 input_directory = 'gs://{}/pyspark_input'.format(bucket_GCP)
 
 conf_BQ = {
@@ -108,8 +108,8 @@ input_path = sc._jvm.org.apache.hadoop.fs.Path(input_directory)
 input_path.getFileSystem(sc._jsc.hadoopConfiguration()).delete(input_path, True)
 
 # Final show off result in DateFrame and time cost--------------------------------------------------
-print "Time cost: {} (seconds) for BigQuery (from GDELT project to our own project)".format(str(timecost_Part2))
-print "Time cost: {} (seconds) for extracting data from BigQuery to Cloud Storage".format(str(timecost_Part3))
-print "Time cost: {} (seconds) for running pagerank with networkx (5 partition)".format(str(timecost_Part4))
-print "Time cost: {} (seconds) for the whole process".format(str((datetime.datetime.now()-timestamp_main)))
+print ("Time cost: {} (seconds) for BigQuery (from GDELT project to our own project)".format(str(timecost_Part2)))
+print ("Time cost: {} (seconds) for extracting data from BigQuery to Cloud Storage".format(str(timecost_Part3)))
+print ("Time cost: {} (seconds) for running pagerank with networkx (5 partition)".format(str(timecost_Part4)))
+print ("Time cost: {} (seconds) for the whole process".format(str((datetime.datetime.now()-timestamp_main))))
 ShowOff.show(n=10)
