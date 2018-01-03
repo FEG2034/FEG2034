@@ -92,16 +92,6 @@ timecost_Part3 = (datetime.datetime.now() - timestamp_Part3).total_seconds()
 # Part(4) running pagerank with networkx------------------------------------------------------------
 timestamp_Part4 = datetime.datetime.now()
 
-#def PR(edge):
-#    G = nx.DiGraph()
-#    def insert_edge(x):
-#        if G.has_edge(x["Actor1CountryCode"], x["Actor2CountryCode"]):
-#            G[x["Actor1CountryCode"]][x["Actor2CountryCode"]]["weight"] +=1
-#        else:
-#            G.add_edge(x["Actor1CountryCode"], x["Actor2CountryCode"], weight=1)
-#    edge.map(insert_edge).collect()
-#    return list(nx.pagerank(G).item())
-
 def PR(edge):
     G = nx.DiGraph()
     G.add_edges_from(list(edge))
