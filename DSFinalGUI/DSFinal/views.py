@@ -20,11 +20,18 @@ def RunDataAnalysis(request):
 	startDate = params["startDate"]
 	endDate = params["endDate"]
 	eventType = params["eventType"]
+
 	outputFileName = str(time.time())+".output"
 	
+	startTime = time.time()
 	os.system("spark-submit GDELT_refactored.py " + startDate + " " + endDate + " " + eventType + " > " + outputFileName)
-	sparkResult = None
+	elapsedTime = time.time()-startTime
+	
+	sparkResult = ""
 	with open(outputFileName) as outputFile:
 		sparkResult = outputFile.readlines()
+	sparkResult.append("Elapsed : " + str(elapsedTime) + " seconds")
+	sparkResult = "".join(sparkResult)
 	print sparkResult
+		
 	return JsonResponse({"SparkResult":sparkResult})

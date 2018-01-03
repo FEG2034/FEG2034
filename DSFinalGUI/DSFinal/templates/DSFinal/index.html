@@ -1,19 +1,23 @@
 <!--{% load staticfiles %}-->
 <!--<link rel="stylesheet" href="{% static 'Bootstrap/css/bootstrap.min.css' %}">-->
+{% csrf_token %}
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
-<div style="font-size:40pt" align="center">Hello world page</div>
-<button id="BtnPost" style="font-size:large">POST</button>
-{{
-	x = 3
-	<p>{{x}}</p>
-}}
+<div style="font-size:40pt" align="center">Team #6	Distributed System Fall 2017 Final Project</div>
+<label>StartDate</label>
+<input id="txtStartDate" type="text" />
+<label>EndDate</label>
+<input id="txtEndDate" type="text" />
+<label>EventType</label>
+<input id="txtEventType" type="text" />
+<button id="BtnPost" style="font-size:large">Go</button>
+<textarea id="resultView" style="height:100%;width:100%" disabled></textarea>
 
 <script type="text/javascript">
 	jQuery( function($){
-		$(document).ready()
-		{
-			console.log("Hello JQuery again!");
-		}
+	$(document).ready()
+	{
+		$("#resultView").val("Spark result will be showed here!");
+	}
 	function getCookie(name) {
     	var cookieValue = null;
     	if (document.cookie && document.cookie !== '') {
@@ -27,6 +31,9 @@
             	}
         	}
     	}
+		else{
+			console.log("Cannot get cookie!");
+		}
     	return cookieValue;
 	}
 	var csrftoken = getCookie('csrftoken');
@@ -37,8 +44,8 @@
 	$.ajaxSetup({
     	beforeSend: function(xhr, settings) {
         		if (!csrfSafeMethod(settings.type) && !this.crossDomain) {
-            		xhr.setRequestHeader("X-CSRFToken", csrftoken);
-					console.log( "Successfully set token" );
+            		xhr.setRequestHeader("X-CSRFToken", csrftoken)
+					console.log("Successfully setup CSRF token");
         		}
 				else
 				{
@@ -48,11 +55,8 @@
 		});
 	$("#BtnPost").on( 'click', function()
 	{
-			var data = {"startDate":"20171101", "endDate":"20171111", "eventType":"19"};
-			for( i in data )
-			{
-				console.log( data[i] );
-			}
+			var data = {"startDate":$("#txtStartDate").val(), "endDate":$("#txtEndDate").val(), "eventType":$("#txtEventType").val()};
+			$("#resultView").val("Processing...please wait");
 			
 			$.post
 			(
@@ -60,7 +64,7 @@
 				data,
 				function(result)
 				{
-					console.log( result.SparkResult );
+					$("#resultView").val(result.SparkResult)
 				},
 				'json'
 			);
