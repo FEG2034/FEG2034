@@ -26,6 +26,8 @@ search_range = [int(sys.argv[1]), int(sys.argv[2])]
 search_event = int(sys.argv[3])
 
 # Part(2) Query the data from GDELT to our own BigQuery Project-id.Dataset.Table--------------------
+# source----https://cloud.google.com/bigquery/docs/python-client-migration?hl=zh-tw#querying_data_with_the_legacy_sql_dialect
+# source----https://cloud.google.com/dataproc/docs/tutorials/bigquery-sparkml
 timestamp_Part2 = datetime.datetime.now()
 
 DATASET_BigQuery = "DS_GDELT_dataset"
@@ -40,7 +42,7 @@ table = bigquery.Table(table_ref, schema=SCHEMA_BigQuery)
 table = bq.create_table(table)
 
 # running query
-QUERY = "SELECT Actor1CountryCode, Actor2CountryCode FROM `gdelt-bq.gdeltv2.events` \
+QUERY = "SELECT Actor1CountryCode, Actor2CountryCode FROM `gdelt-bq.full.events` \
     WHERE EventCode LIKE '{0}%' and SQLDATE >= {1} and SQLDATE <= {2} \
     AND Actor1CountryCode IS NOT NULL AND Actor2CountryCode IS NOT NULL".format(search_event, search_range[0], search_range[1])
 
@@ -53,6 +55,8 @@ iterator = query_job.result()
 timecost_Part2 = (datetime.datetime.now() - timestamp_Part2).total_seconds()
 
 # Part(3) Load data from BigQuery to cloud storage--------------------------------------------------
+# source----https://cloud.google.com/dataproc/docs/tutorials/bigquery-connector-spark-example
+# source----https://cloud.google.com/dataproc/docs/tutorials/bigquery-sparkml
 timestamp_Part3 = datetime.datetime.now()
 
 conf = SparkConf()
@@ -78,14 +82,14 @@ table_data = sc.newAPIHadoopRDD(
     'com.google.gson.JsonObject',
     conf=conf_BQ)
 
-# catch the value of pairRDD, than convert unicode object into dist
-table_values = table_data.values().map(lambda x: ast.literal_eval(x)) 
+# catch the value of pairRDD, than convert unicode object into tuple
+table_values = table_data.values().map(lambda x: (ast.literal_eval(x)['Actor1CountryCode'], ast.literal_eval(x)['Actor2CountryCode']))
 
-# convert [dict(Actor1CountryCode, Actor2CountryCode)] into SQL.DataFrame
-input_DataFrame = SQLCtx.createDataFrame(table_values) 
+# converge the same edge with edge['weigth'] += 1
+table_count = table_values.countByValue()
 
-partition_number = 5
-input_rdd = input_DataFrame.rdd.partitionBy(partition_number)
+partition_number = 2
+input_rdd = sc.parallelize(table_count.items()).map( lambda x: (x[0],{'weight':x[1]}) ).partitionBy(partition_number)
 
 timecost_Part3 = (datetime.datetime.now() - timestamp_Part3).total_seconds()
 
@@ -94,7 +98,8 @@ timestamp_Part4 = datetime.datetime.now()
 
 def PR(edge):
     G = nx.DiGraph()
-    G.add_edges_from(list(edge))
+    edges = list(map(lambda x: tuple([x[0][0], x[0][1], x[1]]), edge))
+    G.add_edges_from(edges)
     return list(nx.pagerank(G).items()) # can't add max_iter
 
 Pagerank = input_rdd.mapPartitions(lambda x: PR(x))
