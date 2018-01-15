@@ -6,8 +6,6 @@ import os
 import platform
 
 pygame.init()
-#all the point are 2D; using numpy.array
-#all vector, configuration are 1D
 
 #background_initialization------------------------------------------------------
 scale = 400/128 # display / model
@@ -123,9 +121,10 @@ class BFS_T:
         index = list(map(lambda x: x[0]==tuple(conf), self.T[potential]))
         if sum(index)==0:
             return False
+        elif index[0]==1 :
+            return (int(potential), 0)
         else:
-            index = [ index[i] * i for i in range(len(index)) ]
-            return (int(potential), sum(index))
+            return (int(potential), (numpy.array(index)*numpy.arange(len(index))).sum() )
 
     def trace(self, where_in_T): # where_in_T = (potential, index in T[i]) of goal
         self.path.insert(0, self.T[where_in_T[0]] [where_in_T[1]] [0])
@@ -202,21 +201,20 @@ def BFS():
         potential = int(sum(potential)/display_objects[0].n_control)
         return potential
 
-    def collision(conf): # problem: we can't correctly detect collision with planning_polygon
+    def collision(conf):
         polygon_robot = [TR(display_objects[0].world_polygon[i], numpy.array(conf)) for i in range(display_objects[0].n_polygon)]
-        polygon_robot = [planning_to_display(polygon) for polygon in polygon_robot]
         bounding_box = numpy.array(polygon_robot).flatten().astype(int)
         bounding_box = bounding_box.reshape((int(bounding_box.size/2), 2))
         bounding_box = numpy.array([bounding_box.min(0), bounding_box.max(0)])
 
         for obstacle in display_objects[2:]:
             #bounding_box intersect or not
-            if (bounding_box[0,0] < obstacle.display_bounding_box[0,0] < bounding_box[1,0] and \
-            bounding_box[0,1] < obstacle.display_bounding_box[0,1] < bounding_box[1,1]) or \
-            (obstacle.display_bounding_box[0,0] < bounding_box[0,0] < obstacle.display_bounding_box[1,0] and \
-            obstacle.display_bounding_box[0,1] < bounding_box[0,1] < obstacle.display_bounding_box[1,1]):
+            if (bounding_box[0,0] < obstacle.planning_bounding_box[0,0] < bounding_box[1,0] and \
+            bounding_box[0,1] < obstacle.planning_bounding_box[0,1] < bounding_box[1,1]) or \
+            (obstacle.planning_bounding_box[0,0] < bounding_box[0,0] < obstacle.planning_bounding_box[1,0] and \
+            obstacle.planning_bounding_box[0,1] < bounding_box[0,1] < obstacle.planning_bounding_box[1,1]):
                 #polygon intersect or not
-                for polygon_obstacle_element in obstacle.display_polygon:
+                for polygon_obstacle_element in obstacle.planning_polygon:
                     for polygon_robot_element in polygon_robot:
                         if intersect_polygon(polygon_robot_element, polygon_obstacle_element):
                             print("robot and obstacle intersect")
@@ -233,7 +231,7 @@ def BFS():
     delta = []
     for dx in (1,0,-1):
         for dy in (1,0,-1):
-            for theta in (20,0,-20):
+            for theta in (10,0,-10):
                     delta.insert(0, (dx,dy,theta))
     delta.remove((0,0,0))
 
@@ -252,7 +250,7 @@ def BFS():
         print(FIRST_conf)
         print(conf_potential(FIRST_conf))
         for neighbor in delta:
-            neighbor_conf = tuple(numpy.array(FIRST_conf)+numpy.array(neighbor))
+            neighbor_conf = tuple([FIRST_conf[i] + neighbor[i] for i in range(3)])
             neighbor_potential = conf_potential(neighbor_conf)
             visited = T.search(neighbor_conf, neighbor_potential)
             if neighbor_potential<260 and visited == False and -180 <= neighbor_conf[-1] <= 180:
@@ -268,7 +266,7 @@ def BFS():
     if SUCCESS:
         display_objects[1].BFS_path = T.path
         print("BFS success")
-    elif not SUCCESS:
+    else:
         print("BFS fail")
 
 def BFS_show():
@@ -453,13 +451,8 @@ polygon_buffer_var = False
 #tkinter_initialization--------------------------------------------------------
 root = tkinter.Tk()
 root.title("Motion Planning - Control Board")
-#pygame_win = tkinter.Frame(root, width = 200, height = 200, background="gray14")
-#pygame_win.pack(fill=tkinter.BOTH, padx=100, pady=100)
 
 ##Label, Checkbotton, Botton
-check = tkinter.BooleanVar()
-Check_lock = tkinter.Checkbutton(root, text="Lock", variable=check, width=10)
-
 option_var = tkinter.StringVar(root)
 option_var.set("robot #0")
 Option = tkinter.OptionMenu(root, option_var, "robot #0", "robot #1")
@@ -470,7 +463,6 @@ Button_BFS = tkinter.Button(root, text="Run BFS", command = BFS, fg='white', bg=
 Button_BFS_show = tkinter.Button(root, text="Show BFS", command = BFS_show, fg='yellow', bg='black')
 Button_clear = tkinter.Button(root, text="CLEAR", command = CLEAR, fg='yellow', bg='blue')
 
-Check_lock.pack(fill=tkinter.Y, side=tkinter.LEFT, expand=1)
 Option.pack(fill=tkinter.BOTH, expand=1)
 Button_NF1.pack(fill=tkinter.BOTH, expand=1)
 Button_NF1_show.pack(fill=tkinter.BOTH, expand=1)
@@ -546,8 +538,6 @@ def main():
                 else:
                     pass
 
-#model section-----------------------------------------------------------------
-        
 #display section---------------------------------------------------------------
         gameDisplay.fill(white)
 
