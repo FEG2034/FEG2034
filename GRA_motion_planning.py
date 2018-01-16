@@ -4,6 +4,7 @@ import tkinter
 import pygame
 import os
 import platform
+import matplotlib.pyplot as plt
 
 pygame.init()
 
@@ -182,7 +183,11 @@ def NF1():
 
 def NF1_show():
     global display_objects
-
+    X = numpy.full((128,128), numpy.arange(128))
+    Y = X.T
+    Z = numpy.flip(display_objects[1].BFS_U[0].reshape(128,128), axis=0)
+    plt.pcolormesh(X,Y,Z)
+    plt.savefig("NF1")
     print(display_objects[1].BFS_U[0])
 
 #--Best First Search BFS
@@ -229,9 +234,9 @@ def BFS():
     T = BFS_T()
 
     delta = []
-    for dx in (1,0,-1):
-        for dy in (1,0,-1):
-            for theta in (10,0,-10):
+    for theta in (0,10,-10):
+        for dx in (0,1,-1):
+            for dy in (0,1,-1):
                     delta.insert(0, (dx,dy,theta))
     delta.remove((0,0,0))
 
@@ -250,7 +255,9 @@ def BFS():
         print(FIRST_conf)
         print(conf_potential(FIRST_conf))
         for neighbor in delta:
-            neighbor_conf = tuple([FIRST_conf[i] + neighbor[i] for i in range(3)])
+            neighbor_conf = [FIRST_conf[i] + neighbor[i] for i in range(3)]
+            neighbor_conf[-1] = angle_standarize(neighbor_conf[-1])
+            neighbor_conf = tuple(neighbor_conf)
             neighbor_potential = conf_potential(neighbor_conf)
             visited = T.search(neighbor_conf, neighbor_potential)
             if neighbor_potential<260 and visited == False and -180 <= neighbor_conf[-1] <= 180:
