@@ -1,5 +1,3 @@
-# FEG2034
-
 《GDELT_PageRank.py》
 ==================
 terminal command: spark-submit GDELT_online.py YYYYMMDD YYYYMMDD event_number  
